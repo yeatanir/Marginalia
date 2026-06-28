@@ -264,18 +264,23 @@ def _find_pdf_for_key(item_key: str) -> Optional[Path]:
     """Find PDF file in local Zotero storage for a given item key."""
     storage = ZOTERO_STORAGE_PATH
     if not storage.exists():
+        print(f"[pdf] storage path missing: {storage}")
         return None
 
     key_path = storage / item_key
     if key_path.exists():
-        pdfs = list(key_path.glob("*.pdf"))
+        pdfs = [f for f in key_path.iterdir() if f.suffix.lower() == ".pdf"]
         if pdfs:
+            print(f"[pdf] found (direct): {pdfs[0]}")
             return pdfs[0]
+        print(f"[pdf] folder exists but no PDF inside: {key_path}")
 
-    for pdf in storage.rglob("*.pdf"):
-        if item_key in str(pdf.parent):
-            return pdf
+    for candidate in storage.rglob("*"):
+        if candidate.suffix.lower() == ".pdf" and item_key in candidate.parent.name:
+            print(f"[pdf] found (rglob): {candidate}")
+            return candidate
 
+    print(f"[pdf] not found in local storage for key: {item_key}")
     return None
 
 @app.get("/papers/{paper_id}/pdf")
@@ -361,6 +366,44 @@ def create_note(paper_id: str, note: NoteCreate):
             "note_type": note.note_type,
             "created_at": created_at
         }
+    finally:
+        db.close()
+
+@app.delete("/papers/{paper_id}/notes/{note_id}")
+def delete_note(paper_id: str, note_id: str):
+    """Delete a single note."""
+    db = get_db()
+    try:
+        result = db.execute(
+            "DELETE FROM notes WHERE id = ? AND paper_id = ?", (note_id, paper_id)
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, "Note not found")
+        db.commit()
+    finally:
+        db.close()
+    return {"deleted": note_id}
+
+class NoteUpdate(BaseModel):
+    content: str
+
+@app.patch("/papers/{paper_id}/notes/{note_id}")
+def update_note(paper_id: str, note_id: str, body: NoteUpdate):
+    """Edit the text content of a note (e.g. fix Whisper or ink-recognition errors)."""
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(400, "Content cannot be empty")
+    db = get_db()
+    try:
+        result = db.execute(
+            "UPDATE notes SET content = ? WHERE id = ? AND paper_id = ?",
+            (content, note_id, paper_id)
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, "Note not found")
+        db.commit()
+        row = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
+        return dict(row)
     finally:
         db.close()
 

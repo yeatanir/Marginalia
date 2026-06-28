@@ -148,6 +148,15 @@ struct PaperView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
+                        // Re-show PKToolPicker (pen/eraser/colour palette).
+                        // Tap this if the palette disappeared after scrolling.
+                        Button {
+                            (canvasRef.canvas as? InkCanvas)?.activatePicker()
+                        } label: {
+                            Image(systemName: "pencil.tip")
+                        }
+                        .help("Show drawing tools")
+
                         // Convert ink strokes → searchable text note (Apple Vision ML, on-device)
                         Button {
                             Task { await recognizeInkOnCurrentPage() }
@@ -275,10 +284,25 @@ private class InkCanvas: PKCanvasView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard window != nil else { return }
-        // At this point the view is in the window — becomeFirstResponder succeeds,
-        // and PKToolPicker correctly shows the floating palette.
+        // Two async hops: first lets SwiftUI finish its layout pass,
+        // second lets the window finish becoming key.
+        // Order matters: becomeFirstResponder() must succeed BEFORE
+        // setVisible so PKToolPicker knows who is showing it.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window != nil else { return }
+            _ = self.becomeFirstResponder()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.toolPicker.setVisible(true, forFirstResponder: self)
+            }
+        }
+    }
+
+    // Call this from a toolbar button so the user can re-show the picker
+    // after tapping the PDF (which causes the canvas to lose first responder).
+    func activatePicker() {
+        _ = becomeFirstResponder()
         toolPicker.setVisible(true, forFirstResponder: self)
-        becomeFirstResponder()
     }
 }
 
@@ -509,6 +533,9 @@ struct NotesSidebarView: View {
     @State private var questions: [String] = []
     @State private var isLoadingQuestions = false
     @State private var showQuestions = false
+    @State private var noteToEdit: MarginaliaNote? = nil
+    @State private var editContent: String = ""
+    @State private var noteToDelete: MarginaliaNote? = nil
 
     var notesForCurrentPage: [MarginaliaNote] {
         notes.filter { $0.page == currentPage }
@@ -610,12 +637,17 @@ struct NotesSidebarView: View {
                     if !notesForCurrentPage.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("On this page")
-                                .font(.system(size: 11, weight: .medium))   // matches SidebarSectionHeader
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(theme.accent)
                                 .padding(.horizontal, 16)
 
                             ForEach(notesForCurrentPage) { note in
-                                NoteCardView(note: note)
+                                NoteCardView(note: note) {
+                                    noteToEdit = note
+                                    editContent = note.content
+                                } onDelete: {
+                                    noteToDelete = note
+                                }
                             }
                         }
                     }
@@ -629,7 +661,12 @@ struct NotesSidebarView: View {
                                 .padding(.horizontal, 16)
 
                             ForEach(otherNotes) { note in
-                                NoteCardView(note: note)
+                                NoteCardView(note: note) {
+                                    noteToEdit = note
+                                    editContent = note.content
+                                } onDelete: {
+                                    noteToDelete = note
+                                }
                             }
                         }
                     }
@@ -652,12 +689,68 @@ struct NotesSidebarView: View {
             }
         }
         .background(t.bgSurface)
-        // Themed hairline left border (0.5pt)
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(t.separator)
                 .frame(width: 0.5)
         }
+        // Edit sheet
+        .sheet(item: $noteToEdit) { note in
+            NavigationView {
+                TextEditor(text: $editContent)
+                    .padding()
+                    .font(.callout)
+                    .navigationTitle("Edit Note")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Cancel") { noteToEdit = nil }
+                        }
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Save") {
+                                Task { await saveEdit(note) }
+                            }
+                            .fontWeight(.semibold)
+                            .disabled(editContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    }
+            }
+        }
+        // Delete confirmation
+        .confirmationDialog(
+            "Delete this note?",
+            isPresented: Binding(get: { noteToDelete != nil }, set: { if !$0 { noteToDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let note = noteToDelete { Task { await deleteNote(note) } }
+            }
+            Button("Cancel", role: .cancel) { noteToDelete = nil }
+        }
+    }
+
+    private func saveEdit(_ note: MarginaliaNote) async {
+        let trimmed = editContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            let updated = try await BackendService.updateNote(paperId: paper.id, noteId: note.id, content: trimmed)
+            if let idx = notes.firstIndex(where: { $0.id == note.id }) {
+                notes[idx] = updated
+            }
+            noteToEdit = nil
+        } catch {
+            print("Update note failed: \(error)")
+        }
+    }
+
+    private func deleteNote(_ note: MarginaliaNote) async {
+        do {
+            try await BackendService.deleteNote(paperId: paper.id, noteId: note.id)
+            notes.removeAll { $0.id == note.id }
+        } catch {
+            print("Delete note failed: \(error)")
+        }
+        noteToDelete = nil
     }
 
     private func loadQuestions() async {
@@ -676,6 +769,8 @@ struct NotesSidebarView: View {
 
 struct NoteCardView: View {
     let note: MarginaliaNote
+    let onEdit: () -> Void
+    let onDelete: () -> Void
 
     @EnvironmentObject var theme: ThemeManager
     @Environment(\.theme) var t
@@ -726,10 +821,18 @@ struct NoteCardView: View {
                 .lineSpacing(4)                         // spec: generous lineSpacing for body/notes
                 .lineLimit(6)
         }
-        .padding(12)                                    // 3× base unit — spec: card padding 12–16pt
+        .padding(12)
         .background(t.bgSurfaceAlt)
-        .cornerRadius(10)                               // spec: 10pt cards (was 8)
-        .padding(.horizontal, 16)                       // 4× base unit (was 12)
+        .cornerRadius(10)
+        .padding(.horizontal, 16)
+        .contextMenu {
+            Button { onEdit() } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            Button(role: .destructive) { onDelete() } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 }
 

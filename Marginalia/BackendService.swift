@@ -145,6 +145,23 @@ class BackendService {
         return try JSONDecoder().decode([MarginaliaNote].self, from: data)
     }
 
+    static func deleteNote(paperId: String, noteId: String) async throws {
+        let url = URL(string: "\(baseURL)/papers/\(paperId)/notes/\(noteId)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        _ = try await URLSession.shared.data(for: request)
+    }
+
+    static func updateNote(paperId: String, noteId: String, content: String) async throws -> MarginaliaNote {
+        let url = URL(string: "\(baseURL)/papers/\(paperId)/notes/\(noteId)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["content": content])
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return try JSONDecoder().decode(MarginaliaNote.self, from: data)
+    }
+
     static func saveNote(paperId: String, page: Int, content: String, noteType: String) async throws -> MarginaliaNote {
         let url = URL(string: "\(baseURL)/papers/\(paperId)/notes")!
         var request = URLRequest(url: url)
