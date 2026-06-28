@@ -120,12 +120,12 @@ This is a personal tool you build and run yourself. There is no App Store listin
 | iPad with Apple Pencil | Running the app | — (you have one) |
 | Always-on Mac (Mac Mini, MacBook left on, etc.) | Backend server | — |
 | Mac with Xcode | Building and signing the app | — |
-| Apple Developer account | Signing the app | Free (7-day expiry) or $99/yr (1-year) |
+| Apple ID (free) | Signing the app | Free — no payment needed |
 | [Tailscale](https://tailscale.com) | Private network between all devices | Free |
 | [Zotero](https://www.zotero.org) | Your reference library | Free |
 | Python 3.10+ | Running the backend | — |
 
-> **On the Apple Developer account:** A free Apple ID lets you sideload on your own device, but the certificate expires every 7 days and Xcode must re-sign. A paid account ($99/year) gives you a 1-year certificate — do this once and forget it. You do **not** need to publish to the App Store.
+> **You do not need to pay anything.** A free Apple ID is all that's required to build and run this on your own iPad. The only catch is that Xcode's free signing certificate expires every 7 days — after which the app stops launching until you hit ▶ in Xcode again (takes ~30 seconds, your data is untouched). The $99/year Apple Developer Program is only needed if you want to distribute to other people's devices or publish to the App Store.
 
 ---
 
@@ -309,8 +309,8 @@ Ollama must be running on the Mac Mini: `ollama serve`. Pull a model if you have
 **Handwriting recognition (ink → text) returns nothing**
 Make sure you have actual ink strokes on the current page before tapping the viewfinder icon. The recognition runs on-device and requires a somewhat legible script. Block letters work better than cursive for short tests.
 
-**App certificate expired (free account)**
-Reconnect your iPad via USB, open Xcode, and press ▶ to rebuild. Takes ~30 seconds. With a paid developer account this happens once per year.
+**App stops launching after ~7 days**
+This is normal with a free Apple ID. Plug in your iPad (or be on the same WiFi), open Xcode, press ▶. Takes ~30 seconds. All your notes and drawings are stored locally and survive the rebuild completely intact.
 
 ---
 
