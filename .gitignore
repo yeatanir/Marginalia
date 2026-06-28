@@ -1,0 +1,48 @@
+# Xcode
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+xcuserdata/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+*.xccheckout
+*.xcscmblueprint
+
+# Credentials — never commit the real backend. Edit marginalia_backend.example.py
+# and copy it to marginalia_backend.py with your own Zotero keys.
+Marginalia/marginalia_backend.py
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.env
+venv/
+.venv/
+
+# Whisper / Ollama models (large binaries)
+*.bin
+*.pt
+models/
+
+# Marginalia runtime data (stays on the Mac Mini)
+*.db
+.marginalia/
+
+# macOS
+.DS_Store
+.AppleDouble
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor
+.vscode/
+.idea/
+*.swp
