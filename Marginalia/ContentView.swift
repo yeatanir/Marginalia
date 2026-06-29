@@ -132,10 +132,17 @@ struct ContentView: View {
             }
             .listStyle(.sidebar)
             .navigationTitle("Marginalia")
+            .refreshable {
+                await loadCollections()
+                await loadUploadedPapers()
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        Task { await loadCollections() }
+                        Task {
+                            await loadCollections()
+                            await loadUploadedPapers()
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
