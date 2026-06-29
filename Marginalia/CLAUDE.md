@@ -101,10 +101,12 @@ free, unlimited path.
 | `MarginaliaApp.swift` | App entry, injects `ThemeManager` into environment | UI logic |
 | `ContentView.swift` | `NavigationSplitView` 3-column shell, loads collections | Paper/PDF logic |
 | `PaperListView.swift` | Middle column: papers in a collection, search | Networking models |
-| `PaperView.swift` | Detail: PDF + PencilKit canvas + voice + notes sidebar | Backend definitions |
+| `PaperView.swift` | Detail: PDF + PencilKit canvas + voice + notes sidebar + Reflect sheet trigger | Backend definitions |
 | `BackendService.swift` | ALL networking + Codable models. Single source for API | View code |
 | `Theme.swift` | ThemeManager, AccentPalette, Theme tokens, SettingsView | Business logic |
 | `InkStore.swift` | Per-page `PKDrawing` persistence keyed by `paperId-page`; Phase 1 on-device only (see §9 Phase 2 for backend sync) | UI code |
+| `ReadingIntentionView.swift` | `ReadingIntentionCard` (compact sidebar card) + `ReadingIntentionEditor` sheet. User-authored reason_saved / reading_goal — never AI-generated | Backend or model definitions |
+| `ReflectView.swift` | Full Reflect sheet: mode tabs (Recall/Revisit/Resolve/Close reading), prompt card, response editor, generate button. Recall mode is fully implemented; others are polished placeholders | Note capture UI |
 
 ### Backend — repo root
 | File | Responsibility |
@@ -135,18 +137,50 @@ GET  /papers/{id}/pdf
      → application/pdf bytes
 
 GET  /papers/{id}/notes
-     → [{ id, paper_id, page, content, note_type, created_at }]
+     → [{ id, paper_id, page, content, note_type, thought_type, created_at }]
 
 POST /papers/{id}/notes
-     body: { paper_id, page, content, note_type }
+     body: { paper_id, page, content, note_type, thought_type? }
      → the created note object
 
 POST /transcribe
      multipart: audio (m4a)
      → { text, language }
+
+── Phase 3: Reflect ────────────────────────────────────────────────────────
+
+GET  /papers/{id}/context
+     → { paper_id, reason_saved, reading_goal, created_at, updated_at } | null
+
+PUT  /papers/{id}/context
+     body: { reason_saved?, reading_goal? }
+     → { paper_id, reason_saved, reading_goal, created_at, updated_at }
+
+GET  /papers/{id}/reflections
+     → [{ id, paper_id, source_note_id, reflection_type, prompt, response,
+          status, provenance, created_at, answered_at }]
+
+POST /papers/{id}/reflections/generate
+     body: { mode: "recall" }
+     → [Reflection]   (newly created, status="open")
+     503 { code: "model_error" } if Ollama fails or returns invalid JSON
+
+PATCH /papers/{id}/reflections/{reflection_id}
+     body: { response?, status? }
+     → updated Reflection
 ```
 
 `note_type` ∈ `"text" | "voice" | "ink"`.
+`thought_type` ∈ `"note" | "question" | "connection" | "idea" | "disagreement"` — defaults to `"note"`.
+`reflection.status` ∈ `"open" | "answered" | "dismissed"`.
+`reflection.provenance` ∈ `"model" | "system"`.
+
+### Schema notes (SQLite migrations — additive only)
+- `notes` table got `thought_type TEXT NOT NULL DEFAULT 'note'` added via `ALTER TABLE`.
+  Wrapped in `try/except sqlite3.OperationalError` so restarting after migration doesn't fail.
+- `paper_context(paper_id PK, reason_saved, reading_goal, created_at, updated_at)` — new table.
+- `reflections(id PK, paper_id, source_note_id, reflection_type, prompt, response,
+  status, provenance, created_at, answered_at)` — new table.
 
 ---
 
@@ -316,14 +350,24 @@ curl http://localhost:8000/collections
 
 ## 9. Roadmap (do NOT pull future phases forward without being asked)
 
-- **Phase 1 (current):** Zotero library browse → PDF + Pencil → text/voice notes
-  persist in SQLite. Theming + light/dark + settings. ← finish & polish this.
-- **Phase 2:** Handwriting→text capture of margin ink into searchable notes.
-  Note search across all papers.
-- **Phase 3:** Spaced interrogation. Ollama generates questions FROM THE USER'S
-  OWN NOTES (not the abstract) and resurfaces them days later.
+- **Phase 1 (done):** Zotero library browse → PDF + Pencil → text/voice notes
+  persist in SQLite. Theming + light/dark + settings.
+- **Phase 2 (done):** Handwriting→text capture of margin ink into searchable notes.
+- **Phase 3 (in progress — Reflect milestone):**
+  - Reading intention card (reason_saved / reading_goal) — done.
+  - thought_type on notes (note/question/connection/idea/disagreement) — done.
+  - Reflections persisted in SQLite — done.
+  - ReflectView sheet (Recall mode live; Revisit/Resolve/Close reading placeholder) — done.
+  - Remaining: note search, spaced resurfacing (scheduled recall), Revisit/Resolve modes.
 - **Phase 4:** Concept map / connections across papers (citation graph from
   Semantic Scholar + user-drawn links).
+
+### Reflect design principles (§3 of Phase 3 spec)
+- User-authored material is always visually primary.
+- Model-generated prompts are visibly labeled ("Suggested by Marginalia") and visually secondary.
+- No chat bubbles, no gradients, no excessive icons. Calm, reading-focused.
+- The Ollama prompt returns strict JSON only; backend strips markdown fences and validates
+  with `json.loads`; returns 503 with `code: "model_error"` if Ollama fails.
 
 When you start a phase, move it into the File Map and API Contract above.
 

@@ -28,6 +28,7 @@ struct PaperView: View {
     @State private var notes: [MarginaliaNote] = []
     @State private var showNotesSidebar = false
     @State private var showVoiceRecorder = false
+    @State private var showReflect = false
     @State private var currentPage = 1
     @State private var newNoteText = ""
     @State private var pdfLoadState: PDFLoadState = .loading
@@ -145,7 +146,8 @@ struct PaperView: View {
                     notes: $notes,
                     currentPage: currentPage,
                     newNoteText: $newNoteText,
-                    onSaveNote: saveTextNote
+                    onSaveNote: { thoughtType in await saveTextNote(thoughtType: thoughtType) },
+                    onReflect: { showReflect = true }
                 )
                 .frame(width: 320)
                 .transition(.move(edge: .trailing))
@@ -200,6 +202,10 @@ struct PaperView: View {
                         .foregroundColor(t.textSecondary)
                 }
             }
+        }
+        .sheet(isPresented: $showReflect) {
+            ReflectView(paper: paper, notes: notes)
+                .environmentObject(theme)
         }
         .task {
             await loadNotes()
@@ -261,14 +267,15 @@ struct PaperView: View {
         }
     }
 
-    private func saveTextNote() async {
+    private func saveTextNote(thoughtType: String = "note") async {
         guard !newNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         do {
             let note = try await BackendService.saveNote(
                 paperId: paper.id,
                 page: currentPage,
                 content: newNoteText,
-                noteType: "text"
+                noteType: "text",
+                thoughtType: thoughtType
             )
             notes.insert(note, at: 0)
             newNoteText = ""
@@ -527,14 +534,13 @@ struct NotesSidebarView: View {
     @Binding var notes: [MarginaliaNote]
     let currentPage: Int
     @Binding var newNoteText: String
-    let onSaveNote: () async -> Void
+    let onSaveNote: (String) async -> Void
+    let onReflect: () -> Void
 
     @EnvironmentObject var theme: ThemeManager
     @Environment(\.theme) var t
 
-    @State private var questions: [String] = []
-    @State private var isLoadingQuestions = false
-    @State private var showQuestions = false
+    @State private var selectedThoughtType: String = "note"
     @State private var noteToEdit: MarginaliaNote? = nil
     @State private var editContent: String = ""
     @State private var noteToDelete: MarginaliaNote? = nil
@@ -556,50 +562,18 @@ struct NotesSidebarView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    Task { await loadQuestions() }
+                    onReflect()
                 } label: {
-                    if isLoadingQuestions {
-                        ProgressView().scaleEffect(0.7)
-                    } else {
-                        Label("Quiz me", systemImage: "brain")
-                            .font(.caption)
-                            .foregroundColor(theme.accent)
-                    }
+                    Label("Reflect", systemImage: "brain")
+                        .font(.caption)
+                        .foregroundColor(theme.accent)
                 }
                 .buttonStyle(.plain)
-                .disabled(notes.isEmpty || isLoadingQuestions)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(t.bgSurfaceAlt)
 
-            if showQuestions && !questions.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(questions, id: \.self) { q in
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: "questionmark.circle")
-                                .foregroundColor(theme.accent)
-                                .font(.caption)
-                                .padding(.top, 2)
-                            Text(q)
-                                .font(.callout)
-                                .foregroundColor(t.textPrimary)
-                                .lineSpacing(3)
-                        }
-                    }
-                }
-                .padding(12)
-                .background(theme.accentSoft(.dark))
-                .cornerRadius(10)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-            }
-
-            // Themed hairline separator (0.5pt, spec: "Hairline separators over heavy dividers")
-            Rectangle()
-                .fill(t.separator)
-
-            // Themed hairline separator (0.5pt, spec: "Hairline separators over heavy dividers")
             Rectangle()
                 .fill(t.separator)
                 .frame(height: 0.5)
@@ -607,20 +581,53 @@ struct NotesSidebarView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {   // 4× base unit section gap
 
+                    // Reading intention (user-authored, above the note composer)
+                    ReadingIntentionCard(paperId: paper.id)
+
                     // Quick text note input
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Add note — page \(currentPage)")
-                            .font(.footnote)                // 13pt — spec: caption = 13pt
-                            .foregroundColor(t.textSecondary)
+                        HStack {
+                            Text("Add note — page \(currentPage)")
+                                .font(.footnote)
+                                .foregroundColor(t.textSecondary)
+                            Spacer()
+                            // Thought-type selector — compact menu, default "note"
+                            Menu {
+                                ForEach(["note", "question", "connection", "idea", "disagreement"], id: \.self) { type in
+                                    Button {
+                                        selectedThoughtType = type
+                                    } label: {
+                                        HStack {
+                                            Text(type.capitalized)
+                                            if selectedThoughtType == type {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Text(selectedThoughtType.capitalized)
+                                        .font(.system(size: 11, weight: .medium))
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 9, weight: .medium))
+                                }
+                                .foregroundColor(theme.accent)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(theme.accentSoft(.dark))
+                                .cornerRadius(6)
+                            }
+                        }
 
                         HStack(alignment: .bottom, spacing: 8) {
                             TextField("Type a note…", text: $newNoteText, axis: .vertical)
                                 .textFieldStyle(.roundedBorder)
-                                .font(.callout)             // 16pt — spec: body, note content
+                                .font(.callout)
                                 .lineLimit(3...6)
 
                             Button {
-                                Task { await onSaveNote() }
+                                Task { await onSaveNote(selectedThoughtType) }
                             } label: {
                                 Image(systemName: "arrow.up.circle.fill")
                                     .font(.title2)
@@ -631,8 +638,8 @@ struct NotesSidebarView: View {
                     }
                     .padding(12)
                     .background(t.bgSurfaceAlt)
-                    .cornerRadius(10)                       // spec: 10pt cards
-                    .padding(.horizontal, 16)               // 4× base unit
+                    .cornerRadius(10)
+                    .padding(.horizontal, 16)
                     .padding(.top, 12)
 
                     // Notes on current page
@@ -755,16 +762,6 @@ struct NotesSidebarView: View {
         noteToDelete = nil
     }
 
-    private func loadQuestions() async {
-        isLoadingQuestions = true
-        defer { isLoadingQuestions = false }
-        do {
-            questions = try await BackendService.fetchQuestions(paperId: paper.id)
-            showQuestions = true
-        } catch {
-            print("Questions failed: \(error)")
-        }
-    }
 }
 
 // MARK: - Note Card
@@ -808,10 +805,20 @@ struct NoteCardView: View {
                 Text(typeLabel)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(theme.accent)
+                // Thought-type badge — only shown when not the default "note"
+                if note.thoughtType != "note" {
+                    Text(note.thoughtType.capitalized)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(theme.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(theme.accentSoft(.dark))
+                        .cornerRadius(4)
+                }
                 Spacer()
                 Text("p. \(note.page)")
                     .font(.caption2)
-                    .foregroundColor(t.textTertiary)    // page is tertiary metadata
+                    .foregroundColor(t.textTertiary)
             }
 
             // Content: 16pt regular (spec: body, note content).
