@@ -204,8 +204,10 @@ struct PaperView: View {
             }
         }
         .sheet(isPresented: $showReflect) {
-            ReflectView(paper: paper, notes: notes)
-                .environmentObject(theme)
+            ReflectView(paper: paper, notes: notes, onNoteSaved: { note in
+                notes.insert(note, at: 0)
+            })
+            .environmentObject(theme)
         }
         .task {
             await loadNotes()

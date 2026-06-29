@@ -39,7 +39,8 @@ An iPad app for reading research papers the way researchers actually read them: 
 - **Voice notes while you read.** Tap mic, speak, stop. Whisper large-v3 transcribes your thought — tuned for accented English and scientific vocabulary — on your own hardware.
 - **Ink → searchable text.** One tap converts your handwritten strokes to a text note using Apple's on-device Vision ML. Runs entirely on the iPad, no network needed.
 - **Notes that stay.** Everything lands in SQLite, attached to the page it came from, persistent across app restarts.
-- **Spaced interrogation (Phase 3).** Days later, the app brings back what *you* wrote and asks if you still believe it — generated from your own notes, not the abstract.
+- **Tag your thinking.** Mark notes as Note, Question, Connection, Idea, or Disagreement when you capture them.
+- **Reflect.** Come back to what you wrote and re-engage with your own thinking — four modes, no AI required for three of them.
 
 ---
 
@@ -246,9 +247,29 @@ For a **fully offline setup**, you can replace Whisper transcription with Apple'
 
 ---
 
-## Ollama / local LLM (Phase 3 — Quiz me)
+## Reflect
 
-The "Quiz me" feature generates recall questions from *your own notes* using a small local LLM via Ollama.
+After you've taken notes on a paper, tap **Reflect** in the notes sidebar. A sheet opens with four modes:
+
+### Recall
+The only mode that uses AI. Sends your notes to a small local model (Ollama on your Mac) and gets back questions that ask *you* to explain your own thinking — not the paper's content. One prompt at a time. You write or speak a response. Responses are saved to SQLite and persist across app restarts. Prompts are visibly labeled "Suggested by Marginalia" so model output is never presented as your own thought.
+
+### Revisit
+No AI. Shows your notes in the order you wrote them — oldest first. For each note: did you still think the same thing by the end? Write or speak a follow-up. It saves as a "connection" note on the same page.
+
+### Resolve
+No AI. Filters only notes you tagged as **Question** or **Disagreement**. For each: did you find an answer? Did your view change? Write or speak a resolution. Saves as a new note on the same page.
+
+### Close reading
+No AI. Pick a page from the page bar at the top. All your annotations for that page are shown. Write or speak a synthesis: in your own words, what was the argument or finding here? Saves as a note.
+
+**Voice input is available in every response field** — tap the mic icon next to "Your response," speak, tap stop. Whisper transcribes it and appends it to the text. Same model as the voice note recorder.
+
+---
+
+## Ollama / local LLM (Reflect — Recall mode)
+
+The Recall mode in Reflect generates recall prompts from *your own notes* using a small local LLM via Ollama.
 
 ```bash
 # On the server Mac
@@ -305,8 +326,8 @@ Whisper large-v3 (~3 GB) downloads on the first request. Monitor: `tail -f /tmp/
 **PDFs not loading**
 Check `ZOTERO_STORAGE_PATH`. If Syncthing hasn't synced yet, enable Zotero file sync as a temporary fallback.
 
-**"Quiz me" fails**
-Ollama must be running (`ollama serve`) and the model must be pulled (`ollama pull gemma3:4b`). Ensure `OLLAMA_MODEL` in `marginalia_backend.py` matches exactly.
+**Reflect → Recall fails to generate prompts**
+Ollama must be running (`ollama serve`) and the model must be pulled (`ollama pull gemma3:4b`). Ensure `OLLAMA_MODEL` in `marginalia_backend.py` matches exactly. Revisit, Resolve, and Close reading don't use Ollama and work offline.
 
 **App stops launching after ~7 days (free Apple ID)**
 Normal behaviour. Plug iPad into Mac, open Xcode, press ▶. ~30 seconds, all data intact.

@@ -126,9 +126,13 @@ struct ReadingIntentionEditor: View {
                         .font(.callout)
                         .frame(minHeight: 80)
                 } header: {
-                    Text("Why did you save this paper?")
+                    HStack {
+                        Text("Why did you save this paper?")
+                        Spacer()
+                        VoiceDictationButton(text: $reasonSaved)
+                    }
                 } footer: {
-                    Text("Optional. Your own words — not generated.")
+                    Text("Your own words — not generated. Speak or type.")
                         .font(.caption)
                         .foregroundColor(t.textTertiary)
                 }
@@ -138,9 +142,13 @@ struct ReadingIntentionEditor: View {
                         .font(.callout)
                         .frame(minHeight: 80)
                 } header: {
-                    Text("What are you looking for?")
+                    HStack {
+                        Text("What's your reading goal?")
+                        Spacer()
+                        VoiceDictationButton(text: $readingGoal)
+                    }
                 } footer: {
-                    Text("Optional. A method, a comparison, an answer to a specific question.")
+                    Text("A method you're looking for, a comparison, a specific question you want answered.")
                         .font(.caption)
                         .foregroundColor(t.textTertiary)
                 }
