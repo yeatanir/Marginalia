@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/platform-iPadOS_18+-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/backend-Python_FastAPI-green?style=flat-square" />
   <img src="https://img.shields.io/badge/transcription-Whisper_large--v3-orange?style=flat-square" />
-  <img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" />
+  <img src="https://img.shields.io/badge/license-Non--commercial-red?style=flat-square" />
   <img src="https://img.shields.io/badge/cost-completely_free-brightgreen?style=flat-square" />
 </p>
 
