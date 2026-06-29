@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pyzotero import zotero
@@ -175,10 +175,10 @@ def root():
 @app.post("/papers/upload")
 async def upload_paper(
     pdf: UploadFile = File(...),
-    title: str = "",
-    authors: str = "",
-    year: str = "",
-    abstract: str = "",
+    title: str = Form(default=""),
+    authors: str = Form(default=""),
+    year: str = Form(default=""),
+    abstract: str = Form(default=""),
 ):
     if not title:
         title = Path(pdf.filename or "Untitled").stem

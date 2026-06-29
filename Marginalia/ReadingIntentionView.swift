@@ -4,7 +4,6 @@ import SwiftUI
 //
 // Compact card shown at the top of the Notes sidebar.
 // Both fields (reason_saved, reading_goal) are user-authored — never AI-generated.
-// Displays an invitation when empty; shows content when set; edits via a small sheet.
 
 struct ReadingIntentionCard: View {
     let paperId: String
@@ -14,7 +13,6 @@ struct ReadingIntentionCard: View {
 
     @State private var context: PaperContext? = nil
     @State private var showEditor = false
-    @State private var isLoading = false
 
     private var hasContent: Bool {
         let r = context?.reasonSaved?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -24,7 +22,6 @@ struct ReadingIntentionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Section label row
             HStack {
                 Text("Reading intention")
                     .font(.system(size: 11, weight: .medium))
@@ -69,14 +66,18 @@ struct ReadingIntentionCard: View {
                 .buttonStyle(.plain)
             }
 
-            Rectangle()
-                .fill(t.separator)
-                .frame(height: 0.5)
+            Rectangle().fill(t.separator).frame(height: 0.5)
         }
-        .task { await loadContext() }
+        .task { await fetchContext() }
+        // Re-fetch from backend whenever the editor closes — confirms the save landed.
+        .onChange(of: showEditor) { _, nowShowing in
+            if !nowShowing {
+                Task { context = try? await BackendService.fetchContext(paperId: paperId) }
+            }
+        }
         .sheet(isPresented: $showEditor) {
             ReadingIntentionEditor(paperId: paperId, existing: context) { updated in
-                context = updated
+                context = updated   // optimistic local update while re-fetch is in flight
             }
         }
     }
@@ -95,10 +96,7 @@ struct ReadingIntentionCard: View {
         }
     }
 
-    private func loadContext() async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
+    private func fetchContext() async {
         context = try? await BackendService.fetchContext(paperId: paperId)
     }
 }
@@ -117,6 +115,7 @@ struct ReadingIntentionEditor: View {
     @State private var reasonSaved: String = ""
     @State private var readingGoal: String = ""
     @State private var isSaving = false
+    @State private var saveError: String? = nil
 
     var body: some View {
         NavigationView {
@@ -177,10 +176,19 @@ struct ReadingIntentionEditor: View {
             reasonSaved = existing?.reasonSaved ?? ""
             readingGoal = existing?.readingGoal ?? ""
         }
+        .alert("Could not save", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
+        }
     }
 
     private func save() async {
         isSaving = true
+        defer { isSaving = false }
         do {
             let updated = try await BackendService.upsertContext(
                 paperId: paperId,
@@ -192,8 +200,7 @@ struct ReadingIntentionEditor: View {
             onSave(updated)
             dismiss()
         } catch {
-            print("Could not save reading intention: \(error)")
+            saveError = "Is your Mac backend running?\n\(error.localizedDescription)"
         }
-        isSaving = false
     }
 }

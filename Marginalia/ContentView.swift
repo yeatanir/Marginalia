@@ -96,6 +96,13 @@ struct ContentView: View {
                                         ? RoundedRectangle(cornerRadius: 8).fill(theme.accentSoft(colorScheme))
                                         : nil
                                 )
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        Task { await deleteUploadedPaper(paper) }
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
                             }
                         }
 
@@ -201,6 +208,16 @@ struct ContentView: View {
             uploadedPapers = try await BackendService.fetchUploadedPapers()
         } catch {
             print("Could not load uploaded papers: \(error)")
+        }
+    }
+
+    private func deleteUploadedPaper(_ paper: ZoteroPaper) async {
+        do {
+            try await BackendService.deleteUploadedPaper(paperId: paper.id)
+            uploadedPapers.removeAll { $0.id == paper.id }
+            if selectedPaper?.id == paper.id { selectedPaper = nil }
+        } catch {
+            print("Delete uploaded paper failed: \(error)")
         }
     }
 

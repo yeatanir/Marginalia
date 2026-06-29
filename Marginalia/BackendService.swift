@@ -171,8 +171,13 @@ class BackendService {
             body.append("\(value)\r\n".data(using: .utf8)!)
         }
         field("title", title); field("authors", authors); field("year", year)
+        // Use the actual title as the filename so the backend can fall back to it
+        // if FastAPI reads the title from the multipart filename rather than the form field.
+        let safeFilename = title
+            .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|"))
+            .joined(separator: "_")
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"pdf\"; filename=\"upload.pdf\"\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"pdf\"; filename=\"\(safeFilename).pdf\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: application/pdf\r\n\r\n".data(using: .utf8)!)
         body.append(pdfData)
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)

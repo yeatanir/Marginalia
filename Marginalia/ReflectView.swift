@@ -9,8 +9,7 @@ enum ReflectMode: String, CaseIterable {
 
 struct ReflectView: View {
     let paper: ZoteroPaper
-    let notes: [MarginaliaNote]
-    var onNoteSaved: ((MarginaliaNote) -> Void)? = nil
+    @Binding var notes: [MarginaliaNote]
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var theme: ThemeManager
@@ -593,7 +592,7 @@ struct ReflectView: View {
             let saved = try await BackendService.saveNote(
                 paperId: paper.id, page: originalNote.page,
                 content: trimmed, noteType: "text", thoughtType: "connection")
-            onNoteSaved?(saved)
+            notes.insert(saved, at: 0)
             revisitDraft = ""; revisitIndex += 1
         } catch { print("Could not save revisit note: \(error)") }
     }
@@ -608,7 +607,7 @@ struct ReflectView: View {
             let saved = try await BackendService.saveNote(
                 paperId: paper.id, page: originalNote.page,
                 content: trimmed, noteType: "text", thoughtType: "note")
-            onNoteSaved?(saved)
+            notes.insert(saved, at: 0)
             resolveDraft = ""; resolveIndex += 1
         } catch { print("Could not save resolve note: \(error)") }
     }
@@ -623,7 +622,7 @@ struct ReflectView: View {
             let saved = try await BackendService.saveNote(
                 paperId: paper.id, page: page,
                 content: trimmed, noteType: "text", thoughtType: "note")
-            onNoteSaved?(saved)
+            notes.insert(saved, at: 0)
             closeReadingDraft = ""
         } catch { print("Could not save synthesis: \(error)") }
     }
