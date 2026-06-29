@@ -350,4 +350,10 @@ Issues and PRs welcome. Read `CLAUDE.md` before contributing — it has the full
 
 ---
 
+## Built with Claude
+
+This project was designed and built with the help of [Claude](https://claude.ai) (Anthropic). The architecture, Swift app, Python backend, and design system were developed collaboratively through Claude Code.
+
+---
+
 <p align="center"><em>"What you understand by yourself is yours."</em></p>
