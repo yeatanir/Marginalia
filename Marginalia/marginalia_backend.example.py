@@ -247,7 +247,9 @@ def delete_uploaded_paper(paper_id: str):
 def get_collections():
     try:
         zot = get_zotero_client()
-        collections = zot.collections()
+        # zot.everything() follows Zotero's pagination automatically — default limit is 100
+        # so without it, large libraries silently return only the first page.
+        collections = zot.everything(zot.collections())
         result = [
             {"key": c["data"]["key"], "name": c["data"]["name"],
              "paper_count": c["data"].get("numItems", 0)}
@@ -261,7 +263,7 @@ def get_collections():
 def get_papers_in_collection(collection_id: str):
     try:
         zot = get_zotero_client()
-        return _format_papers(zot.collection_items(collection_id))
+        return _format_papers(zot.everything(zot.collection_items(collection_id)))
     except Exception as e:
         raise HTTPException(500, f"Zotero error: {e}")
 
@@ -269,7 +271,7 @@ def get_papers_in_collection(collection_id: str):
 def get_all_papers():
     try:
         zot = get_zotero_client()
-        items = zot.items(itemType="journalArticle || conferencePaper || preprint || book")
+        items = zot.everything(zot.items(itemType="journalArticle || conferencePaper || preprint || book"))
         return _format_papers(items)
     except Exception as e:
         raise HTTPException(500, f"Zotero error: {e}")

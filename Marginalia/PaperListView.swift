@@ -35,17 +35,27 @@ struct PaperListView: View {
                     PaperRowView(paper: paper)
                         .tag(paper)
                         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                        .listRowSeparatorTint(t.separator)  // hairline in theme separator color
-                        .listRowBackground(Color.clear)     // let bgPrimary show through
+                        .listRowSeparatorTint(t.separator)
+                        .listRowBackground(Color.clear)
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .background(t.bgPrimary)                    // warm #FAFAF8, not pure white
+                .background(t.bgPrimary)
                 .searchable(text: $searchText, prompt: "Search papers…")
+                .refreshable { await loadPapers() }
             }
         }
         .navigationTitle(collection.name)
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task { await loadPapers() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
         .task(id: collection.id) {
             await loadPapers()
         }
