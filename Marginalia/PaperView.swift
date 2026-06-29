@@ -8,10 +8,12 @@ import Vision
 
 enum PDFLoadState { case loading, loaded, failed }
 
-// Shared reference so PaperView can read the live PKDrawing for ink recognition.
-// Reference type — safe to pass into UIViewRepresentable without binding overhead.
+// Shared reference so PaperView can reach the live PKCanvasView for the current PDF page.
+// canvas is computed dynamically via a closure set by the coordinator — avoids stale cached
+// references when multiple pages are visible simultaneously.
 final class CanvasRef {
-    weak var canvas: PKCanvasView?
+    var lookup: (() -> PKCanvasView?)?
+    var canvas: PKCanvasView? { lookup?() }
 }
 
 // MARK: - Main Paper View
@@ -28,10 +30,6 @@ struct PaperView: View {
     @State private var showVoiceRecorder = false
     @State private var currentPage = 1
     @State private var newNoteText = ""
-    @State private var isRecording = false
-    @State private var isTranscribing = false
-    @State private var audioRecorder: AVAudioRecorder?
-    @State private var recordingURL: URL?
     @State private var pdfLoadState: PDFLoadState = .loading
     @State private var pdfRetryToken = 0
     @State private var canvasRef = CanvasRef()
@@ -79,36 +77,60 @@ struct PaperView: View {
                     }
                 }
 
-                // FABs hidden during error — nothing to annotate when PDF failed
+                // FABs + voice panel — hidden during load error
                 if pdfLoadState != .failed {
-                    VStack(spacing: 12) {
-                        Button {
-                            showVoiceRecorder.toggle()
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(t.bgSurface.opacity(0.9))
-                                    .frame(width: 52, height: 52)
-                                    .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 2)
-                                Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                                    .font(.system(size: 20, weight: .medium))
-                                    .foregroundColor(isRecording ? .red : theme.accent)
-                            }
+                    VStack(alignment: .trailing, spacing: 12) {
+                        // Voice recorder panel — floats above the FABs, stays compact
+                        if showVoiceRecorder {
+                            VoiceRecorderPanel(
+                                paper: paper,
+                                currentPage: currentPage,
+                                onNoteSaved: { note in
+                                    notes.insert(note, at: 0)
+                                },
+                                onDismiss: {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        showVoiceRecorder = false
+                                    }
+                                }
+                            )
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
 
-                        Button {
-                            withAnimation(.spring(response: 0.3)) {
-                                showNotesSidebar.toggle()
+                        // FABs
+                        VStack(spacing: 12) {
+                            Button {
+                                withAnimation(.spring(response: 0.3)) {
+                                    showVoiceRecorder.toggle()
+                                }
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(showVoiceRecorder
+                                            ? theme.accent
+                                            : t.bgSurface.opacity(0.9))
+                                        .frame(width: 52, height: 52)
+                                        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 2)
+                                    Image(systemName: "mic.fill")
+                                        .font(.system(size: 20, weight: .medium))
+                                        .foregroundColor(showVoiceRecorder ? .white : theme.accent)
+                                }
                             }
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(t.bgSurface.opacity(0.9))
-                                    .frame(width: 52, height: 52)
-                                    .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 2)
-                                Image(systemName: showNotesSidebar ? "sidebar.right" : "note.text")
-                                    .font(.system(size: 20, weight: .medium))
-                                    .foregroundColor(theme.accent)
+
+                            Button {
+                                withAnimation(.spring(response: 0.3)) {
+                                    showNotesSidebar.toggle()
+                                }
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(t.bgSurface.opacity(0.9))
+                                        .frame(width: 52, height: 52)
+                                        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 2)
+                                    Image(systemName: showNotesSidebar ? "sidebar.right" : "note.text")
+                                        .font(.system(size: 20, weight: .medium))
+                                        .foregroundColor(theme.accent)
+                                }
                             }
                         }
                     }
@@ -179,15 +201,6 @@ struct PaperView: View {
                 }
             }
         }
-        .sheet(isPresented: $showVoiceRecorder) {
-            VoiceRecorderSheet(
-                paper: paper,
-                currentPage: currentPage,
-                onNoteSaved: { note in
-                    notes.insert(note, at: 0)
-                }
-            )
-        }
         .task {
             await loadNotes()
         }
@@ -208,9 +221,10 @@ struct PaperView: View {
         defer { isRecognizing = false }
 
         let drawing = canvas.drawing
-        let bounds = canvas.bounds.isEmpty
-            ? CGRect(x: 0, y: 0, width: 1194, height: 1590)
-            : canvas.bounds
+
+        // Each canvas is sized by PDFKit to exactly one PDF page via PDFPageOverlayViewProvider.
+        // canvas.bounds IS the page area — no contentOffset arithmetic needed.
+        let bounds = canvas.bounds.isEmpty ? CGRect(x: 0, y: 0, width: 768, height: 1024) : canvas.bounds
 
         // Render ink to image (white background for better Vision accuracy)
         let format = UIGraphicsImageRendererFormat()
@@ -304,6 +318,19 @@ private class InkCanvas: PKCanvasView {
         _ = becomeFirstResponder()
         toolPicker.setVisible(true, forFirstResponder: self)
     }
+
+    func reactivateAfterReparent() {
+        guard window != nil else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            _ = self.becomeFirstResponder()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.toolPicker.setVisible(true, forFirstResponder: self)
+            }
+        }
+    }
+
 }
 
 struct PDFAnnotationView: UIViewRepresentable {
@@ -321,13 +348,15 @@ struct PDFAnnotationView: UIViewRepresentable {
         let container = UIView()
         container.clipsToBounds = true
 
-        // --- PDF layer (fills container) ---
-        // displayMode/Direction = continuous vertical scroll.
-        // usePageViewController NOT used — we need the internal UIScrollView for gesture forwarding.
         let pdfView = PDFView()
         pdfView.autoScales = true
         pdfView.displayMode = .singlePageContinuous
         pdfView.displayDirection = .vertical
+        // isInMarkupMode tells PDFView it is hosting an annotation layer. It suppresses
+        // PDFView's internal pencil-proximity behavior — the text-selection preparation,
+        // cursor tracking, and Scribble activation that PDFKit triggers when Apple Pencil
+        // approaches the screen — which is the root cause of strokes disappearing on hover.
+        pdfView.isInMarkupMode = true
         pdfView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(pdfView)
         NSLayoutConstraint.activate([
@@ -337,51 +366,20 @@ struct PDFAnnotationView: UIViewRepresentable {
             pdfView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
         ])
 
-        // --- PencilKit canvas (transparent, on top of PDFView) ---
-        // InkCanvas.didMoveToWindow calls becomeFirstResponder and shows PKToolPicker
-        // at exactly the right moment — after the view enters the window hierarchy.
-        // drawingPolicy = .pencilOnly → drawing GRs only fire for Apple Pencil.
-        // isScrollEnabled = false → disables inherited UIScrollView pan GR.
-        // pinchGestureRecognizer disabled → our own pinch GR takes over for zoom.
         let toolPicker = PKToolPicker()
-        let canvas = InkCanvas(toolPicker: toolPicker)
-        canvas.drawingPolicy = .pencilOnly
-        canvas.isScrollEnabled = false
-        canvas.isOpaque = false
-        canvas.backgroundColor = .clear
-        canvas.pinchGestureRecognizer?.isEnabled = false
-        canvas.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(canvas)
-        NSLayoutConstraint.activate([
-            canvas.topAnchor.constraint(equalTo: container.topAnchor),
-            canvas.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            canvas.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            canvas.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-        ])
-
         let coordinator = context.coordinator
         coordinator.pdfView = pdfView
-        coordinator.canvas = canvas
-        canvas.delegate = coordinator
-        canvasRef.canvas = canvas
         coordinator.toolPicker = toolPicker
 
-        // Finger pan → forward to PDFView's internal UIScrollView
-        let fingerPan = UIPanGestureRecognizer(
-            target: coordinator,
-            action: #selector(Coordinator.handleFingerPan(_:))
-        )
-        fingerPan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
-        canvas.addGestureRecognizer(fingerPan)
+        // Dynamic lookup: always returns the canvas for the page currently on screen.
+        // Evaluated at button-press time — no cached reference, no timing issues.
+        canvasRef.lookup = { [weak coordinator] in
+            coordinator?.currentPageCanvas()
+        }
 
-        // Finger pinch → PDFView.scaleFactor
-        let fingerPinch = UIPinchGestureRecognizer(
-            target: coordinator,
-            action: #selector(Coordinator.handleFingerPinch(_:))
-        )
-        canvas.addGestureRecognizer(fingerPinch)
-
-        canvas.drawing = InkStore.load(paperId: paperId, page: 1)
+        // pageOverlayViewProvider must be set BEFORE assigning the document so PDFKit
+        // can call overlayViewFor on the first visible pages during initial layout.
+        pdfView.pageOverlayViewProvider = coordinator
 
         URLSession.shared.dataTask(with: pdfURL) { data, response, error in
             DispatchQueue.main.async {
@@ -423,17 +421,28 @@ struct PDFAnnotationView: UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
         NotificationCenter.default.removeObserver(coordinator)
+        coordinator.cleanup()
     }
 
-    class Coordinator: NSObject, PKCanvasViewDelegate {
+    // Coordinator conforms to PDFPageOverlayViewProvider — Apple's official API
+    // (iOS 16+) for overlaying annotation views on each PDF page. PDFKit sizes,
+    // positions, and rotates each overlay automatically. Combined with
+    // pdfView.isInMarkupMode = true this is the standard approach used by annotation
+    // apps; it eliminates the need for any gesture-recognizer hacks or KVO on
+    // contentSize, and crucially suppresses the pencil-proximity behavior in PDFView
+    // that was causing ink strokes to disappear on Apple Pencil hover.
+    class Coordinator: NSObject, PKCanvasViewDelegate, PDFPageOverlayViewProvider {
         @Binding var currentPage: Int
         @Binding var loadState: PDFLoadState
         let paperId: String
         var pdfView: PDFView?
-        var canvas: PKCanvasView?
         var toolPicker: PKToolPicker?
-        // Tracks the last-known page so we can save before switching
         var lastPage: Int = 1
+
+        // One canvas per PDF page — created lazily as pages scroll into view.
+        private var pageCanvases: [PDFPage: InkCanvas] = [:]
+        // Maps ObjectIdentifier(canvas) → 1-based page index for per-page InkStore saves.
+        private var canvasPageIndex: [ObjectIdentifier: Int] = [:]
 
         init(currentPage: Binding<Int>, loadState: Binding<PDFLoadState>, paperId: String) {
             _currentPage = currentPage
@@ -441,79 +450,72 @@ struct PDFAnnotationView: UIViewRepresentable {
             self.paperId = paperId
         }
 
+        func cleanup() {
+            // PDFPageOverlayViewProvider lifecycle is owned by PDFKit — nothing to tear down.
+        }
+
+        func currentPageCanvas() -> PKCanvasView? {
+            guard let page = pdfView?.currentPage else { return nil }
+            return pageCanvases[page]
+        }
+
+        // MARK: - PDFPageOverlayViewProvider
+
+        func pdfView(_ view: PDFView, overlayViewFor page: PDFPage) -> UIView? {
+            if let existing = pageCanvases[page] { return existing }
+            guard let toolPicker else { return nil }
+
+            let canvas = InkCanvas(toolPicker: toolPicker)
+            canvas.drawingPolicy = .pencilOnly   // pencil draws; fingers pass through to PDF scroll
+            canvas.isScrollEnabled = false
+            canvas.isOpaque = false
+            canvas.backgroundColor = .clear
+            canvas.pinchGestureRecognizer?.isEnabled = false
+            canvas.delegate = self
+
+            let pageIndex = (view.document?.index(for: page) ?? 0) + 1
+            canvas.drawing = InkStore.load(paperId: paperId, page: pageIndex)
+            canvasPageIndex[ObjectIdentifier(canvas)] = pageIndex
+            pageCanvases[page] = canvas
+            return canvas
+        }
+
+        func pdfView(_ view: PDFView, willDisplayOverlayView overlayView: UIView, for page: PDFPage) {
+            guard let canvas = overlayView as? InkCanvas else { return }
+            canvas.reactivateAfterReparent()
+        }
+
+        func pdfView(_ view: PDFView, willEndDisplayingOverlayView overlayView: UIView, for page: PDFPage) {
+            guard let canvas = overlayView as? InkCanvas,
+                  let pageIndex = canvasPageIndex[ObjectIdentifier(canvas)] else { return }
+            let drawing = canvas.drawing
+            let pid = paperId
+            DispatchQueue.global(qos: .background).async {
+                InkStore.save(drawing, paperId: pid, page: pageIndex)
+            }
+        }
+
+        // MARK: - Page tracking
+
         @objc func pageChanged(_ notification: Notification) {
             guard let pdfView = notification.object as? PDFView,
                   let page = pdfView.currentPage,
                   let document = pdfView.document else { return }
             let newPage = document.index(for: page) + 1
             guard newPage != lastPage else { return }
-
-            // Persist the drawing for the page being left
-            if let canvas = canvas {
-                InkStore.save(canvas.drawing, paperId: paperId, page: lastPage)
-            }
-
             lastPage = newPage
             currentPage = newPage
-
-            // Load the stored drawing for the incoming page
-            if let canvas = canvas {
-                canvas.drawing = InkStore.load(paperId: paperId, page: newPage)
-            }
         }
+
+        // MARK: - Drawing persistence
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+            guard let pageIndex = canvasPageIndex[ObjectIdentifier(canvasView)] else { return }
             let drawing = canvasView.drawing
             let pid = paperId
-            let page = lastPage
             DispatchQueue.global(qos: .background).async {
-                InkStore.save(drawing, paperId: pid, page: page)
+                InkStore.save(drawing, paperId: pid, page: pageIndex)
             }
-        }
-
-        // MARK: - Finger gesture forwarding
-
-        @objc func handleFingerPan(_ gr: UIPanGestureRecognizer) {
-            guard let sv = pdfScrollView else { return }
-            let maxX = max(0, sv.contentSize.width - sv.bounds.width)
-            let maxY = max(0, sv.contentSize.height - sv.bounds.height)
-
-            switch gr.state {
-            case .changed:
-                let t = gr.translation(in: gr.view)
-                sv.contentOffset = CGPoint(
-                    x: max(0, min(sv.contentOffset.x - t.x, maxX)),
-                    y: max(0, min(sv.contentOffset.y - t.y, maxY))
-                )
-                gr.setTranslation(.zero, in: gr.view)
-            case .ended:
-                let v = gr.velocity(in: gr.view)
-                let target = CGPoint(
-                    x: max(0, min(sv.contentOffset.x - v.x * 0.2, maxX)),
-                    y: max(0, min(sv.contentOffset.y - v.y * 0.2, maxY))
-                )
-                UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseOut]) {
-                    sv.contentOffset = target
-                }
-            default: break
-            }
-        }
-
-        @objc func handleFingerPinch(_ gr: UIPinchGestureRecognizer) {
-            guard let pdfView = pdfView else { return }
-            let newScale = pdfView.scaleFactor * gr.scale
-            pdfView.scaleFactor = max(pdfView.minScaleFactor, min(pdfView.maxScaleFactor, newScale))
-            gr.scale = 1.0
-        }
-
-        private var pdfScrollView: UIScrollView? {
-            guard let pdfView = pdfView else { return nil }
-            func find(_ v: UIView) -> UIScrollView? {
-                if let sv = v as? UIScrollView { return sv }
-                for sub in v.subviews { if let f = find(sub) { return f } }
-                return nil
-            }
-            return find(pdfView)
         }
     }
 }
@@ -838,122 +840,167 @@ struct NoteCardView: View {
 
 // MARK: - Voice Recorder Sheet
 
-struct VoiceRecorderSheet: View {
+// Compact floating voice recorder panel. Appears above the mic FAB — does not
+// cover the reading content or require the user to dismiss a full-screen sheet.
+struct VoiceRecorderPanel: View {
     let paper: ZoteroPaper
     let currentPage: Int
     let onNoteSaved: (MarginaliaNote) -> Void
+    let onDismiss: () -> Void
 
-    @Environment(\.dismiss) var dismiss
     @EnvironmentObject var theme: ThemeManager
     @Environment(\.theme) var t
 
     @State private var isRecording = false
     @State private var isTranscribing = false
     @State private var transcribedText = ""
+    @State private var isTextExpanded = false
     @State private var audioRecorder: AVAudioRecorder?
     @State private var recordingURL: URL?
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 32) {
+        VStack(alignment: .leading, spacing: 12) {
+
+            // ── Header row ──────────────────────────────────────────
+            HStack(spacing: 8) {
+                // Status indicator
+                if isTranscribing {
+                    ProgressView().scaleEffect(0.75)
+                    Text("Transcribing…")
+                        .font(.subheadline)
+                        .foregroundColor(t.textSecondary)
+                } else if isRecording {
+                    Circle().fill(.red).frame(width: 8, height: 8)
+                    Text("Recording · p.\(currentPage)")
+                        .font(.subheadline)
+                        .foregroundColor(.red)
+                } else if !transcribedText.isEmpty {
+                    Image(systemName: "text.bubble.fill")
+                        .font(.subheadline)
+                        .foregroundColor(theme.accent)
+                    Text("Review · p.\(currentPage)")
+                        .font(.subheadline)
+                        .foregroundColor(t.textPrimary)
+                } else {
+                    Image(systemName: "mic")
+                        .font(.subheadline)
+                        .foregroundColor(theme.accent)
+                    Text("Voice note · p.\(currentPage)")
+                        .font(.subheadline)
+                        .foregroundColor(t.textSecondary)
+                }
+
                 Spacer()
 
-                // Status
-                VStack(spacing: 12) {
-                    if isTranscribing {
-                        ProgressView("Transcribing with Whisper...")
-                            .font(.subheadline)
-                    } else if isRecording {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(.red)
-                                .frame(width: 10, height: 10)
-                            Text("Recording...")
-                                .foregroundColor(.red)
+                // Record / stop (hidden once transcription appears)
+                if transcribedText.isEmpty {
+                    Button {
+                        if isRecording { stopRecording() } else { startRecording() }
+                    } label: {
+                        Image(systemName: isRecording ? "stop.fill" : "record.circle")
+                            .font(.system(size: 22))
+                            .foregroundColor(isRecording ? .red : theme.accent)
+                    }
+                    .disabled(isTranscribing)
+                }
+
+                // Close / dismiss
+                Button {
+                    if isRecording { stopRecording() }
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(t.textTertiary)
+                        .padding(6)
+                        .background(t.bgSurfaceAlt)
+                        .clipShape(Circle())
+                }
+            }
+
+            // ── Transcription review ─────────────────────────────────
+            if !transcribedText.isEmpty {
+                if isTextExpanded {
+                    TextEditor(text: $transcribedText)
+                        .font(.subheadline)
+                        .frame(height: 130)
+                        .padding(8)
+                        .background(t.bgSurfaceAlt)
+                        .cornerRadius(8)
+                } else {
+                    Text(transcribedText)
+                        .font(.subheadline)
+                        .lineLimit(3)
+                        .foregroundColor(t.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) { isTextExpanded = true }
+                        }
+                }
+
+                HStack(spacing: 10) {
+                    Button("Discard") {
+                        transcribedText = ""
+                        isTextExpanded = false
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(t.textSecondary)
+
+                    Spacer()
+
+                    if !isTextExpanded {
+                        Button("Edit") {
+                            withAnimation(.easeInOut(duration: 0.2)) { isTextExpanded = true }
                         }
                         .font(.subheadline)
-                    } else if !transcribedText.isEmpty {
-                        Text("Transcribed")
-                            .font(.caption)
-                            .foregroundColor(t.textSecondary)
-                    } else {
-                        Text("Tap the mic to record a voice note\nfor page \(currentPage)")
-                            .font(.subheadline)
-                            .foregroundColor(t.textSecondary)
-                            .multilineTextAlignment(.center)
+                        .foregroundColor(theme.accent)
                     }
-                }
 
-                // Mic button
-                Button {
-                    if isRecording { stopRecording() } else { startRecording() }
-                } label: {
-                    Image(systemName: isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundColor(isRecording ? .red : theme.accent)
-                }
-                .disabled(isTranscribing)
-
-                // Transcribed text preview and edit
-                if !transcribedText.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Review and edit:")
-                            .font(.caption)
-                            .foregroundColor(t.textSecondary)
-                        TextEditor(text: $transcribedText)
-                            .font(.body)
-                            .frame(minHeight: 100, maxHeight: 200)
-                            .padding(8)
-                            .background(t.bgSurfaceAlt)
-                            .cornerRadius(10)
-                    }
-                    .padding(.horizontal)
-
-                    Button("Save Note") {
+                    Button("Save") {
                         Task { await saveNote() }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(transcribedText.isEmpty)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(theme.accent)
+                    .cornerRadius(8)
                 }
-
-                if let error = errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-
-                Spacer()
             }
-            .navigationTitle("Voice Note")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
+
+            // ── Error ────────────────────────────────────────────────
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .lineLimit(3)
             }
         }
+        .padding(16)
+        .frame(width: 290)
+        .background(t.bgSurface.opacity(0.97))
+        .cornerRadius(14)
+        .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
     }
+
+    // MARK: - Recording
 
     private func startRecording() {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.record, mode: .default)
             try session.setActive(true)
-
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("voice_note_\(UUID().uuidString).m4a")
             recordingURL = url
-
             let settings: [String: Any] = [
                 AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
                 AVSampleRateKey: 44100,
                 AVNumberOfChannelsKey: 1,
                 AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
             ]
-
             audioRecorder = try AVAudioRecorder(url: url, settings: settings)
             audioRecorder?.record()
             isRecording = true
@@ -976,7 +1023,7 @@ struct VoiceRecorderSheet: View {
             let audioData = try Data(contentsOf: url)
             transcribedText = try await BackendService.transcribeAudio(audioData: audioData)
         } catch {
-            errorMessage = "Transcription failed. Is your Mac Mini backend running?\n\(error.localizedDescription)"
+            errorMessage = "Transcription failed. Is the Mac Mini backend running?\n\(error.localizedDescription)"
         }
         isTranscribing = false
     }
@@ -990,7 +1037,7 @@ struct VoiceRecorderSheet: View {
                 noteType: "voice"
             )
             onNoteSaved(note)
-            dismiss()
+            onDismiss()
         } catch {
             errorMessage = "Could not save note: \(error.localizedDescription)"
         }

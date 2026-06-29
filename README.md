@@ -1,13 +1,14 @@
 <p align="center">
-  <img src="assets/marginalia-wordmark.png" alt="Marginalia" width="280" />
+  <img src="icon.png" alt="Marginalia" width="160" style="border-radius:22%" />
 </p>
 
 <p align="center">
+  <strong>Marginalia</strong><br/>
   <em>Your understanding, preserved.</em>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-iPadOS_26.5-blue?style=flat-square" />
+  <img src="https://img.shields.io/badge/platform-iPadOS_18+-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/backend-Python_FastAPI-green?style=flat-square" />
   <img src="https://img.shields.io/badge/transcription-Whisper_large--v3-orange?style=flat-square" />
   <img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" />
@@ -20,9 +21,9 @@
 
 There is a particular kind of loss that happens silently, paper by paper, across a research career.
 
-You read something carefully. Something clicks — a connection to a method you tried six months ago, a question the authors didn't ask, a suspicion that their parameterization won't hold at high temperatures. You underline a sentence. Maybe you scribble something in the margin. Then you close the PDF and move on.
+You read something carefully. Something clicks — a connection to a method you tried six months ago, a question the authors didn't ask, a suspicion that their parameterisation won't hold at high temperatures. You underline a sentence. Maybe you scribble something in the margin. Then you close the PDF and move on.
 
-Three weeks later, you remember that you had a thought. You cannot remember what it was. You re-read the paper. The underline is there. The margin note is illegible, or gone entirely, or trapped inside a PDF on a device you no longer use.
+Three weeks later, you remember that you had a thought. You cannot remember what it was. The underline is there. The margin note is illegible, or gone entirely, or trapped inside a PDF on a device you no longer use.
 
 The thought — yours, original, the product of your specific expertise reading this specific paper — is gone.
 
@@ -30,220 +31,99 @@ This is not a minor inconvenience. **It is the slow erosion of the thing that ma
 
 ---
 
-## What AI got wrong
-
-The response to information overload in research has been more AI: more summarization, more automatic extraction, more feeds of "relevant" papers, more bullet points that tell you what a paper says so you don't have to read it yourself.
-
-This is exactly backwards.
-
-A summary tells you what someone else decided was important. It does not tell you what *you* would have noticed, what connections *you* would have made, what questions *your* specific research context would have raised. Reading a summary and feeling like you understood a paper is the illusion of understanding — and it is arguably worse than not reading the paper at all, because it closes off the question without opening the thinking.
-
-The generation effect — documented in cognitive science since 1978 — is unambiguous: **information you generate yourself is retained dramatically better than information you receive passively.** Your confused margin question encodes better than a clean AI summary. Your voice note, rambling and uncertain, is worth more than a five-bullet abstract.
-
-Marginalia is built on this premise. The AI in this tool does not think for you. It helps you think better, and it makes sure the thinking you already did doesn't disappear.
-
----
-
-## What Marginalia is
+## What Marginalia does
 
 An iPad app for reading research papers the way researchers actually read them: pen in hand, writing in the margins.
 
-**Apple Pencil on the PDF.** Circle a word. Underline a claim you're skeptical of. Write a question in the margin in your own handwriting. The app captures it — handwriting converted to searchable text on-device, privately, by Apple's own ML — and attaches it to that exact page of that exact paper.
-
-**Voice notes while you read.** Tap the mic and speak. Not a dictated summary — a live thought. "This is the same problem Erhart was trying to solve in 2005, but they've gone around it differently and I'm not sure it holds for the oxidation case." Whisper large-v3 handles the transcription, tuned for accented English and scientific vocabulary, running entirely on your own hardware.
-
-**Notes that stay.** Everything lands in one place, attached to its source, searchable, retrievable. Not lost in a PDF. Not forgotten in a folder. Yours.
-
-**Your understanding, resurfaces.** Later — days or weeks after you annotated a paper — the app brings back what *you* wrote and asks if you still believe it. Not a quiz generated from the abstract. A question generated from your own words. The difference matters enormously.
+- **Apple Pencil on the PDF.** Circle, underline, write in your own handwriting. Strokes are anchored to each page and survive scroll and zoom.
+- **Voice notes while you read.** Tap mic, speak, stop. Whisper large-v3 transcribes your thought — tuned for accented English and scientific vocabulary — on your own hardware.
+- **Ink → searchable text.** One tap converts your handwritten strokes to a text note using Apple's on-device Vision ML. Runs entirely on the iPad, no network needed.
+- **Notes that stay.** Everything lands in SQLite, attached to the page it came from, persistent across app restarts.
+- **Spaced interrogation (Phase 3).** Days later, the app brings back what *you* wrote and asks if you still believe it — generated from your own notes, not the abstract.
 
 ---
 
-## What Marginalia is not
+## What it is not
 
-- Not a paper discovery tool. Finding papers is a solved problem.
-- Not a summarizer. AI summaries replace thinking. Marginalia captures it.
-- Not a cloud service. Everything runs on your own hardware.
-- Not a subscription. Completely free, now and always.
-- Not another Zotero. It works *with* your existing Zotero library.
-
----
-
-## The philosophy in one sentence
-
-> Use AI to restore the conditions under which deep thinking was possible — not to replace the thinking itself.
+- Not a summariser. AI summaries replace thinking. Marginalia captures it.
+- Not a cloud service. Everything runs on hardware you own.
+- Not a subscription. Free forever.
+- Not another Zotero. It works *with* your Zotero library.
 
 ---
 
 ## How it works
 
 ```
-Your iPad                     Your Mac Mini (always-on)
-─────────────────────         ──────────────────────────────────
-PDF viewer                    FastAPI backend
-Apple Pencil → ink            Zotero API → your library metadata
-Handwriting → text            ~/Zotero/storage → your PDFs
-                     ◄───►    Whisper large-v3 → transcription
-Voice → audio                 SQLite → your notes
-Notes sidebar                 (later) Ollama → interrogation engine
+Your iPad                     Your always-on Mac (Mac Mini or MacBook)
+─────────────────────         ────────────────────────────────────────
+PDF viewer (PDFKit)           FastAPI backend  :8000
+Apple Pencil → ink            Zotero API  →  your library metadata
+Handwriting → text  ◄───►    ~/Zotero/storage  →  PDF files
+Voice → audio                 Whisper large-v3  →  transcription
+Notes sidebar                 SQLite  →  your notes
+                              (Phase 3) Ollama + Gemma/Llama  →  interrogation
 ```
 
-All communication over Tailscale. No cloud. No third-party servers. No data leaves your machines.
-
-Your MacBook Pro runs Xcode and builds the app. Your Mac Mini runs the backend and stays on. Your iPad is where you actually read.
+All communication over Tailscale (or your local network). No cloud. No third-party servers.
 
 ---
 
-## Roadmap
+## Setup options
 
-### Phase 1 — Capture ← current
-The foundation. PDF + Pencil + voice. Notes persist and are retrievable. Your thinking stops evaporating.
-
-### Phase 2 — Search
-Handwriting-to-text across all papers. Global note search. Find the thought you had three months ago.
-
-### Phase 3 — Interrogation
-The spaced retrieval engine. Not generated from abstracts — generated from your own notes. The AI asks you to defend what *you* wrote, not summarize what the authors said.
-
-### Phase 4 — Connection
-Concept maps across papers. Citation graph integration. See how the thing you read last week connects to the thing you read in your first year.
+You have three ways to run the backend, from simplest to most powerful. **Pick the one that matches what you have.**
 
 ---
 
-## Setup
+### Option A — Your main Mac (simplest, fully free)
 
-This is a personal tool you build and run yourself. There is no App Store listing. You sideload the app onto your own iPad from Xcode, and you run the backend on a Mac you own.
-
-### What you need
-
-| Component | What for | Cost |
-|---|---|---|
-| iPad with Apple Pencil | Running the app | — (you have one) |
-| Always-on Mac (Mac Mini, MacBook left on, etc.) | Backend server | — |
-| Mac with Xcode | Building and signing the app | — |
-| Apple ID (free) | Signing the app | Free — no payment needed |
-| [Tailscale](https://tailscale.com) | Private network between all devices | Free |
-| [Zotero](https://www.zotero.org) | Your reference library | Free |
-| Python 3.10+ | Running the backend | — |
-
-> **You do not need to pay anything.** A free Apple ID is all that's required to build and run this on your own iPad. The only catch is that Xcode's free signing certificate expires every 7 days — after which the app stops launching until you hit ▶ in Xcode again (takes ~30 seconds, your data is untouched). The $99/year Apple Developer Program is only needed if you want to distribute to other people's devices or publish to the App Store.
-
----
-
-### Step 1 — Clone the repo
+If you only have one Mac, run the backend on it. The limitation is that the backend only works when your Mac is awake — fine if you read papers at your desk.
 
 ```bash
+# 1. Clone
 git clone https://github.com/yeatanir/Marginalia.git
 cd Marginalia
-```
 
----
-
-### Step 2 — Mac Mini: configure and run the backend
-
-Install dependencies:
-
-```bash
+# 2. Install backend dependencies
 pip3 install fastapi uvicorn pyzotero faster-whisper python-multipart
-```
 
-Get your Zotero credentials at [zotero.org/settings/keys](https://www.zotero.org/settings/keys):
-- Note your numeric **User ID** (shown under your username)
-- Create a new **private key** with read-only library access
-
-Copy the example config and fill in your credentials:
-
-```bash
+# 3. Configure credentials (see "Zotero credentials" below)
 cp Marginalia/marginalia_backend.example.py Marginalia/marginalia_backend.py
-```
+# Edit marginalia_backend.py and fill in ZOTERO_LIBRARY_ID, ZOTERO_API_KEY
 
-Open `marginalia_backend.py` and edit the configuration block at the top:
-
-```python
-ZOTERO_LIBRARY_ID   = "12345678"           # your numeric user ID
-ZOTERO_API_KEY      = "aBcDeFgHiJkLmN..."  # your API key
-ZOTERO_STORAGE_PATH = Path("/Users/YOUR_USERNAME/Zotero/storage")
-WHISPER_MODEL       = "large-v3"            # best for accented English + science
-```
-
-Run it:
-
-```bash
+# 4. Run
 python3 Marginalia/marginalia_backend.py
 ```
 
-Test: open `http://localhost:8000/collections` — you should see your Zotero collections as JSON.
+Your Mac's local IP (e.g. `192.168.1.x`) works fine when the iPad and Mac are on the same Wi-Fi. For use away from home, add both to [Tailscale](https://tailscale.com) (free) and use the Tailscale IP instead.
 
-Find your Mac Mini's Tailscale IP (you'll need it for the app):
+---
+
+### Option B — Always-on server (recommended for researchers)
+
+This is how the original author uses it. An always-on Mac Mini (or any always-on machine — an old MacBook left plugged in works too) runs the backend 24/7 and the iPad can reach it from anywhere via Tailscale.
 
 ```bash
-tailscale ip -4
+# On the server Mac:
+git clone https://github.com/yeatanir/Marginalia.git
+pip3 install fastapi uvicorn pyzotero faster-whisper python-multipart
+cp Marginalia/marginalia_backend.example.py Marginalia/marginalia_backend.py
+# Edit credentials, then:
+python3 Marginalia/marginalia_backend.py
 ```
 
----
+**PDF sync with Syncthing (free, unlimited):**
+If Zotero desktop runs on your MacBook, its PDFs live there, not on the server. [Syncthing](https://syncthing.net) mirrors them over:
+1. MacBook: share `~/Zotero/storage` as **Send Only**
+2. Server Mac: accept the share as **Receive Only**
 
-### Step 3 — PDF sync with Syncthing
+No size limit, no subscription, runs over Tailscale automatically.
 
-Your Zotero desktop app runs on your MacBook, so your PDFs live there. The backend on the Mac Mini needs to read them without you having to pay for Zotero storage.
+> **Without Syncthing:** the backend falls back to fetching PDFs from the Zotero web API. This works but has a 300 MB free storage cap.
 
-Install [Syncthing](https://syncthing.net) on both machines (free, open-source, peer-to-peer):
-
-1. On MacBook: add `~/Zotero/storage` as a shared folder, set to **Send Only**
-2. On Mac Mini: accept the share, set to **Receive Only**, path `~/Zotero/storage`
-3. Syncthing runs over your existing Tailscale connection automatically
-
-Once set up, the Mac Mini has a live read-only mirror of all your PDFs. No size limit, no subscription.
-
-> If you skip Syncthing for now, the backend falls back to fetching PDFs from the Zotero web API (works but has a 300 MB free storage cap).
-
----
-
-### Step 4 — Build and sideload the iPad app
-
-**Open the project in Xcode:**
-
-```
-Open Marginalia.xcodeproj in Xcode
-```
-
-**Set your signing team:**
-
-1. Click the `Marginalia` project in the navigator
-2. Select the `Marginalia` target → **Signing & Capabilities**
-3. Under **Team**, sign in with your Apple ID and select your personal team
-4. Change **Bundle Identifier** to something unique, e.g. `com.yourname.marginalia`
-
-Xcode will automatically manage your signing certificate.
-
-**Set your backend URL:**
-
-Open `Marginalia/BackendService.swift` and update the default URL:
-
-```swift
-static let defaultBaseURL = "http://100.x.x.x:8000"  // your Mac Mini's Tailscale IP
-```
-
-Alternatively, leave the default and set it at runtime: after first launch, tap ⚙ → Backend and paste the URL there. This is persistent and survives app updates.
-
-**Enable Developer Mode on your iPad** (required for sideloaded apps):
-
-Settings → Privacy & Security → Developer Mode → turn on, restart when prompted.
-
-**Connect your iPad via USB, select it as the target in Xcode, press ▶.**
-
-The first build takes a minute. After that, if Xcode and the iPad are on the same network, subsequent builds are wireless.
-
-**Trust the certificate on iPad** (first time only):
-
-Settings → General → VPN & Device Management → your Apple ID → Trust.
-
-> With a free Apple Developer account, you'll need to rebuild and reinstall from Xcode every 7 days. With a paid account ($99/year), certificates last 1 year.
-
----
-
-### Step 5 — Make the backend start automatically on the Mac Mini
-
+**Auto-start on boot:**
 ```bash
-# Replace YOUR_USERNAME with your Mac Mini username
+# Replace YOUR_USERNAME and path as needed
 cat > ~/Library/LaunchAgents/com.marginalia.backend.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -262,61 +142,178 @@ cat > ~/Library/LaunchAgents/com.marginalia.backend.plist << 'EOF'
 </dict>
 </plist>
 EOF
-
 launchctl load ~/Library/LaunchAgents/com.marginalia.backend.plist
 ```
 
-Check that it started: `curl http://localhost:8000/`
+---
+
+### Option C — API key for transcription (no local model needed)
+
+If you don't want to run Whisper locally (it downloads a ~3 GB model on first use), you can swap in an API-based transcription service. The backend is structured so this is a small edit to `marginalia_backend.py`.
+
+**Groq (free tier, very fast — recommended):**
+```python
+# pip3 install groq
+from groq import Groq
+client = Groq(api_key="gsk_...")  # free at console.groq.com
+
+@app.post("/transcribe")
+async def transcribe(audio: UploadFile = File(...)):
+    audio_bytes = await audio.read()
+    result = client.audio.transcriptions.create(
+        model="whisper-large-v3",
+        file=("recording.m4a", audio_bytes, "audio/m4a"),
+    )
+    return {"text": result.text, "language": "en"}
+```
+
+**OpenAI Whisper API (~$0.006/minute):**
+```python
+# pip3 install openai
+import openai
+client = openai.OpenAI(api_key="sk-...")
+
+@app.post("/transcribe")
+async def transcribe(audio: UploadFile = File(...)):
+    audio_bytes = await audio.read()
+    transcript = client.audio.transcriptions.create(
+        model="whisper-1",
+        file=("recording.m4a", audio_bytes, "audio/m4a"),
+    )
+    return {"text": transcript.text, "language": "en"}
+```
+
+The iPad app is unchanged — it talks to the same `/transcribe` endpoint regardless of what's behind it.
 
 ---
 
-### Step 6 — Connect iPad to Tailscale
+### What if I don't use Zotero?
 
-Install [Tailscale](https://apps.apple.com/app/tailscale/id1470499037) on your iPad and log in with the same account used on the Mac Mini. The iPad can then reach the backend at its Tailscale IP even when you're away from home.
+You can use Marginalia without Zotero by uploading PDFs directly from the app (tap **+** in the collections view). Uploaded papers are stored on the backend and annotated identically to Zotero papers.
+
+Alternatively, fork the backend and point `ZOTERO_STORAGE_PATH` at any folder of PDFs — the Zotero metadata API is only used for the collections sidebar; PDF serving and notes work on any files.
 
 ---
 
-## Using the app
+## Zotero credentials
 
-**PKToolPicker (pen palette):** The floating palette appears automatically when you open a paper. Switch between pen, pencil, marker, and eraser from there. It stays docked at the bottom or side of the screen.
+1. Go to [zotero.org/settings/keys](https://www.zotero.org/settings/keys)
+2. Note your **numeric User ID** (shown under your username on that page)
+3. Click **Create new private key** → read-only library access → save
+4. Fill in `marginalia_backend.py`:
 
-**Drawing:** Apple Pencil draws. Finger scrolls and pinch-zooms. Both work simultaneously.
+```python
+ZOTERO_LIBRARY_ID   = "12345678"          # numeric, not your username
+ZOTERO_API_KEY      = "aBcDeFgHiJkLmN..."
+ZOTERO_STORAGE_PATH = Path("/Users/YOUR_USERNAME/Zotero/storage")
+```
 
-**Ink → text note:** After writing on a page, tap the **⊕ viewfinder** icon in the top toolbar. Apple's on-device ML (Vision framework) reads your handwriting and saves it as a searchable text note attached to that page. Runs entirely on the iPad, no network needed.
+---
 
-**Clear ink:** Tap the **trash** icon in the top toolbar to clear all strokes on the current page.
+## Building the iPad app
 
-**Voice note:** Tap the mic FAB (floating button, bottom right). Speak. Stop. Whisper transcribes it on your Mac Mini — tuned for accented English and scientific vocabulary. Review and edit the text, then save.
+**Requirements:** Mac with Xcode 16+, iPad with iPadOS 18+, Apple Pencil, free Apple ID.
 
-**Quiz me:** After writing notes on a paper, open the notes sidebar (notebook icon, bottom right) and tap "Quiz me." Ollama generates 2-3 recall questions from *your own notes*, not the abstract. Requires Ollama running on the Mac Mini.
+```
+1. Open Marginalia.xcodeproj in Xcode
+2. Signing & Capabilities → Team: sign in with your Apple ID → personal team
+3. Change Bundle Identifier to something unique (e.g. com.yourname.marginalia)
+4. Connect iPad via USB, select it as the target
+5. Press ▶
+```
+
+**Set your backend URL** — after first launch, tap ⚙ in the app → Backend → paste your Mac's IP and port (`http://192.168.x.x:8000` on local Wi-Fi, or the Tailscale IP for remote access). This setting persists across app updates.
+
+**Enable Developer Mode on iPad** (required once): Settings → Privacy & Security → Developer Mode → on → restart.
+
+**Trust the certificate** (first time only): Settings → General → VPN & Device Management → your Apple ID → Trust.
+
+> With a **free Apple ID**, the app certificate expires every 7 days. Rebuild from Xcode to renew (~30 seconds, all data intact). With a **paid Apple Developer account** ($99/year), certificates last 1 year.
+
+---
+
+## On-device ML — features that work offline
+
+Several features run entirely on the iPad with no backend:
+
+| Feature | Technology | Needs backend? |
+|---|---|---|
+| Ink → text note | Apple Vision (VNRecognizeTextRequest) | No |
+| PDF rendering | Apple PDFKit | No |
+| Drawing / annotation | Apple PencilKit | No |
+
+For a **fully offline setup**, you can replace Whisper transcription with Apple's `SFSpeechRecognizer` (on-device, supports many languages, no download). Quality is lower than Whisper large-v3 for accented English and scientific vocabulary, but it works with no Mac at all. This is left as a fork-friendly customisation point in the transcription route.
+
+---
+
+## Ollama / local LLM (Phase 3 — Quiz me)
+
+The "Quiz me" feature generates recall questions from *your own notes* using a small local LLM via Ollama.
+
+```bash
+# On the server Mac
+brew install ollama
+ollama serve          # starts on localhost:11434
+
+# Pick a model based on your RAM
+ollama pull gemma3:4b        # 4B params, ~3 GB — fast, great for Q&A (author's choice)
+ollama pull llama3.2:3b      # 3B params, ~2 GB — very fast
+ollama pull gemma3:12b       # 12B params, ~8 GB — higher quality
+```
+
+Set `OLLAMA_MODEL` in `marginalia_backend.py` to match the model you pulled. The author uses **Gemma 3 4B** — it handles "generate 3 recall questions from these research notes" reliably on Apple Silicon without a dedicated GPU.
+
+---
+
+## Whisper model sizes
+
+The author uses `large-v3` for best accuracy with accented English and scientific terms. Smaller models work if RAM is a constraint:
+
+| Model | Download | Speed | Notes |
+|---|---|---|---|
+| `tiny` | ~75 MB | Very fast | Clear speech, quiet environment |
+| `base` | ~150 MB | Fast | Good for standard accents |
+| `small` | ~500 MB | Fast | Most accents, general use |
+| `medium` | ~1.5 GB | Moderate | Strong accents, technical vocab |
+| `large-v3` | ~3 GB | Slower | Best overall — recommended |
+
+Change `WHISPER_MODEL` in `marginalia_backend.py` to switch.
+
+---
+
+## Tailscale setup (for remote access)
+
+Tailscale creates a private network between your devices so the iPad reaches the Mac backend from anywhere without opening ports or configuring a router.
+
+1. Install Tailscale on the Mac: [tailscale.com/download](https://tailscale.com/download)
+2. Install Tailscale on the iPad: [App Store](https://apps.apple.com/app/tailscale/id1470499037)
+3. Log in with the same account on both
+4. `tailscale ip -4` on the Mac gives you the Tailscale IP — use this in the app's Backend setting
+
+Tailscale's free tier covers up to 3 devices (iPad + server Mac + MacBook).
 
 ---
 
 ## Troubleshooting
 
 **"Cannot connect" on iPad**
-Both devices must be connected to Tailscale. Check the backend IP in Settings → Backend. Verify the backend is running: `curl http://<mac-mini-tailscale-ip>:8000/`.
+Both devices must be on Tailscale or the same Wi-Fi. Test: `curl http://<your-mac-ip>:8000/` should return `{"status":"ok"}`.
 
 **Voice transcription times out on first use**
-Whisper large-v3 (~3GB) downloads on the first transcription request. Wait 5-10 minutes on a good connection. Subsequent calls are fast. You can watch the download: `tail -f /tmp/marginalia.log` on the Mac Mini.
+Whisper large-v3 (~3 GB) downloads on the first request. Monitor: `tail -f /tmp/marginalia.log` on the backend Mac.
 
 **PDFs not loading**
-Check `ZOTERO_STORAGE_PATH` in your `marginalia_backend.py`. If Syncthing hasn't synced yet, enable Zotero file sync temporarily — the backend falls back to the web API. Check logs: `tail -f /tmp/marginalia.log`.
+Check `ZOTERO_STORAGE_PATH`. If Syncthing hasn't synced yet, enable Zotero file sync as a temporary fallback.
 
 **"Quiz me" fails**
-Ollama must be running on the Mac Mini: `ollama serve`. Pull a model if you haven't: `ollama pull llama3.2:3b`. Set `OLLAMA_MODEL` accordingly in `marginalia_backend.py`.
+Ollama must be running (`ollama serve`) and the model must be pulled (`ollama pull gemma3:4b`). Ensure `OLLAMA_MODEL` in `marginalia_backend.py` matches exactly.
 
-**Handwriting recognition (ink → text) returns nothing**
-Make sure you have actual ink strokes on the current page before tapping the viewfinder icon. The recognition runs on-device and requires a somewhat legible script. Block letters work better than cursive for short tests.
-
-**App stops launching after ~7 days**
-This is normal with a free Apple ID. Plug in your iPad (or be on the same WiFi), open Xcode, press ▶. Takes ~30 seconds. All your notes and drawings are stored locally and survive the rebuild completely intact.
+**App stops launching after ~7 days (free Apple ID)**
+Normal behaviour. Plug iPad into Mac, open Xcode, press ▶. ~30 seconds, all data intact.
 
 ---
 
 ## Contributing
-
-Marginalia is open source and will stay that way. If you're a researcher who reads papers with a pen in hand and has lost more thoughts than you can count, this was built for you.
 
 Issues and PRs welcome. Read `CLAUDE.md` before contributing — it has the full architecture, design system, and coding conventions.
 
@@ -324,15 +321,12 @@ Issues and PRs welcome. Read `CLAUDE.md` before contributing — it has the full
 
 ## Acknowledgements
 
-Built on the shoulders of:
-- [Zotero](https://www.zotero.org) — the reference manager that actually respects researchers
-- [faster-whisper](https://github.com/guillaumekynast/faster-whisper) — Whisper inference that runs on real hardware
+- [Zotero](https://www.zotero.org) — the reference manager that respects researchers
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — Whisper inference that runs on real hardware
 - [Tailscale](https://tailscale.com) — making "your own server" actually work
-- The generation effect (Slamecka & Graf, 1978) — the cognitive science this tool is built on
-- Every researcher who ever filled a book's margins with better thoughts than the book itself
+- [Ollama](https://ollama.com) — local LLMs without a PhD in DevOps
+- The generation effect (Slamecka & Graf, 1978) — the cognitive science this is built on
 
 ---
 
-<p align="center">
-  <em>"What you understand by yourself is yours."</em>
-</p>
+<p align="center"><em>"What you understand by yourself is yours."</em></p>
